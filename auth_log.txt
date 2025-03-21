@@ -1,0 +1,6 @@
+Failed login attempt for user: user1
+Failed login attempt for user: user1
+Failed login attempt for user: Kavya
+[2025-03-21 02:04:23] User: Kavya - Success
+[AUTH] Kavya - Login Successful
+[SYSCALL] Sargun executed command: Sargun123
