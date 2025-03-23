@@ -4,5 +4,8 @@
 #include <string>
 
 bool isValidUser(const std::string& username, const std::string& password);
+std::string hashPassword(const std::string& password);
+std::string getUserRole(const std::string& username);
 
-#endif
+#endif // AUTH_MODULE_H
+
