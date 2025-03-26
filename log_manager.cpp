@@ -1,34 +1,19 @@
-#include "log_manager.h"
-#include <iostream>
-#include <fstream>
+#include <ctime>  // Add this for time functions
 
-using namespace std;
-
-const string LOG_FILE = "auth_log.txt";
-
-// Function to log events
-void logEvent(const string& eventType, const string& details) {
-    ofstream logFile(LOG_FILE, ios::app);
-    if (logFile.is_open()) {
-        logFile << "[" << eventType << "] " << details << endl;
-        logFile.close();
-    } else {
-        cerr << "⚠ Error opening log file!\n";
-    }
-}
-
-// Function to display logs
-void displayLogs() {
-    ifstream logFile(LOG_FILE);
+void logEvent(const std::string& username, const std::string& event) {
+    std::ofstream logFile("syscall_log.txt", std::ios::app);
     if (!logFile) {
-        cerr << "⚠ No logs found!\n";
+        std::cerr << "Error: Unable to open log file!" << std::endl;
         return;
     }
 
-    string line;
-    cout << "📜 System Logs:\n";
-    while (getline(logFile, line)) {
-        cout << line << endl;
-    }
+    // Get current time
+    time_t now = time(0);
+    char* dt = ctime(&now);  // Convert time to string format
+
+    // Remove newline character from time string
+    dt[strlen(dt) - 1] = '\0';
+
+    logFile << "[" << dt << "] " << username << " - " << event << std::endl;
     logFile.close();
 }
