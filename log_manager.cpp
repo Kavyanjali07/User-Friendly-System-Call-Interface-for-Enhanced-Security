@@ -1,4 +1,18 @@
 #include <ctime>  // Add this for time functions
+void displayLogs() {
+    std::ifstream logFile("syscall_log.txt");
+    if (!logFile) {
+        std::cerr << "Error: Unable to open log file!" << std::endl;
+        return;
+    }
+
+    std::string line;
+    std::cout << "==== System Call Logs ====" << std::endl;
+    while (std::getline(logFile, line)) {
+        std::cout << line << std::endl;
+    }
+    logFile.close();
+}
 
 void logEvent(const std::string& username, const std::string& event) {
     std::ofstream logFile("syscall_log.txt", std::ios::app);
