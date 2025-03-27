@@ -122,14 +122,22 @@ This whole structure makes sure everything stays secure, is easy to manage, and 
 
 **INSTALLATION &amp; SETUP GUIDE**  
 If you want to set this up on Kali Linux, follow these steps:
+1. **Install git if not installed**
+  If installed check - 
+	git --version
+  
+  If not installed
+	sudo apt update
+	 sudo apt install git -y
 
-1. **Clone the Repository**  
+2. **Clone the Repository**  
    First, run these commands in the terminal:  
    ```
    mkdir SecureSysCallProject  
    cd SecureSysCallProject  
-   git clone &lt;repository-url&gt;  
-   cd &lt;repository-folder&gt;  
+   git clone git@github.com:your-username/repository-name.git  
+   cd repository-name
+
    ```
 
 2. **Install Required Dependencies**  
@@ -148,7 +156,8 @@ If you want to set this up on Kali Linux, follow these steps:
 4. **Run the Program**  
    Lastly, you can run the program like this:  
    ```
-   ./secure_syscall  
+   ./secure_auth
+  
    ```  
 
 With that, you should have everything set up!
