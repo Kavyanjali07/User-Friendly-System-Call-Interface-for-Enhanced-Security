@@ -19,4 +19,20 @@ void secureSystemCall(const string& username, const string& command) {
         cout << "⛔ Unauthorized user! Cannot execute command.\n";
         logEvent("SYSCALL", username + " attempted unauthorized access!");
     }
+bool isValidCommand(const std::string& command) {
+    // Define allowed commands
+    std::vector<std::string> allowedCommands = {"ls", "pwd", "whoami", "uptime"};
+    return std::find(allowedCommands.begin(), allowedCommands.end(), command) != allowedCommands.end();
+}
+
+void secureSystemCall(const std::string& username, const std::string& command) {
+    if (!isValidCommand(command)) {
+        logSystemCall(username, "Unauthorized command attempt: " + command);
+        std::cout << "Error: Command not allowed!" << std::endl;
+        return;
+    }
+    system(command.c_str());
+    logSystemCall(username, "Executed command: " + command);
+}
+
 }
