@@ -5,20 +5,29 @@
 
 using namespace std;
 
+bool isAdmin(const std::string& username) {
+    return getUserRole(username) == "Admin";
+}
+
+void secureSystemCall(const std::string& username, const std::string& command) {
+    std::vector<std::string> adminOnlyCommands = {"shutdown", "reboot"};
+
+    if (std::find(adminOnlyCommands.begin(), adminOnlyCommands.end(), command) != adminOnlyCommands.end()) {
+        if (!isAdmin(username)) {
+            logSystemCall(username, "Unauthorized admin command attempt: " + command);
+            std::cout << "Error: You do not have permission to execute this command!" << std::endl;
+            return;
+        }
+    }
+    system(command.c_str());
+    logSystemCall(username, "Executed command: " + command);
+}
+
 // Function to authenticate user
 bool authenticateUser(const string& username, const string& password) {
     return isValidUser(username, password);
 }
 
-// Function to execute a secure system call
-void secureSystemCall(const string& username, const string& command) {
-    if (users.find(username) != users.end()) { 
-        cout << "🔒 Executing secure command: " << command << endl;
-        logEvent("SYSCALL", username + " executed command: " + command);
-    } else {
-        cout << "⛔ Unauthorized user! Cannot execute command.\n";
-        logEvent("SYSCALL", username + " attempted unauthorized access!");
-    }
 bool isValidCommand(const std::string& command) {
     // Define allowed commands
     std::vector<std::string> allowedCommands = {"ls", "pwd", "whoami", "uptime"};
