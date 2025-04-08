@@ -1,24 +1,35 @@
-# Compiler
+# Compiler and flags
 CXX = g++
+CXXFLAGS = -std=c++11 -Wall -Iinclude
+LDFLAGS = -lssl -lcrypto
 
-# Compiler Flags
-CXXFLAGS = -Wall -Wextra -std=c++17 -lssl -lcrypto
+# Directories
+SRC_DIR = src
+BUILD_DIR = build
+INCLUDE_DIR = include
 
-# Source Files
-SRCS = src/auth_module.cpp src/log_manager.cpp src/syscall_handler.cpp src/users.cpp
+# Source and Object files
+SOURCES = $(wildcard $(SRC_DIR)/*.cpp)
+OBJECTS = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SOURCES))
 
-# Header Files
-HEADERS = include/auth_module.h include/log_manager.h include/syscall_handler.h include/users.h
+# Output binary
+TARGET = secure_auth
 
-# Output Executable
-TARGET = secure_syscall
+# Default rule
+all: $(BUILD_DIR) $(TARGET)
 
-# Build the executable
-all: $(TARGET)
+# Linking final binary
+$(TARGET): $(OBJECTS)
+	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
 
-$(TARGET): $(SRCS) $(HEADERS)
-	$(CXX) $(CXXFLAGS) $(SRCS) -o $(TARGET)
+# Compiling source files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Clean command
+# Create build dir if not exist
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Clean
 clean:
-	rm -f $(TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET)

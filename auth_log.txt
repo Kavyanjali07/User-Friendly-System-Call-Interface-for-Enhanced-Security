@@ -4,3 +4,12 @@ Failed login attempt for user: Kavya
 [2025-03-21 02:04:23] User: Kavya - Success
 [AUTH] Kavya - Login Successful
 [SYSCALL] Sargun executed command: Sargun123
+[AUTH] Kavya - Login Successful
+[SYSCALL] Sargun executed command: Sargun123
+[AUTH] Kavya - Login Successful
+[AUTH] k - Login Failed
+[SYSCALL] Kavya executed command: Kavya123
+[SYSCALL] Kavya executed command: ls
+[AUTH] Kavya - Login Successful
+[SYSCALL] Kavya executed command: Kavya123
+[AUTH] bxe - Login Failed
