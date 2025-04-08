@@ -1,0 +1,14 @@
+if [ ! -f users/user_data.txt ]; then
+    echo "[*] Creating initial admin user..."
+    username="admin"
+    password="admin123"
+    role="Admin"
+    
+    # Create hashed password (basic implementation for setup)
+    hashed_pwd=$(echo -n "${password}${username}" | sha256sum | cut -d' ' -f1)
+    
+    echo "$username $hashed_pwd $role" > users/user_data.txt
+    echo "[+] Created initial admin user with username 'admin' and password 'admin123'"
+fi
+
+echo "[+] Setup complete! Run the application with: python3 secure_access_gui.py"
