@@ -16,6 +16,8 @@ from PyQt5.QtCore import Qt, QTimer, QDateTime
 # Constants
 TOTP_SECRET_FILE = "users/totp_secrets.txt"
 LOG_FILE = "logs/system_logs.txt"
+# List of commands that regular users are allowed to run
+USER_ALLOWED_COMMANDS = ["ls", "uptime", "echo", "pwd", "touch", "cat"]
 
 class TwoFactorSetupDialog(QDialog):
     def __init__(self, username):
@@ -91,7 +93,9 @@ class TwoFactorSetupDialog(QDialog):
         
     def verify_code(self):
         totp = pyotp.TOTP(self.secret)
-        if totp.verify(self.code_input.text()):
+        # Fixed the verification issue by using more lenient verification
+        # This allows for time drift between server and client
+        if totp.verify(self.code_input.text(), valid_window=1):
             # Save TOTP secret
             os.makedirs(os.path.dirname(TOTP_SECRET_FILE), exist_ok=True)
             with open(TOTP_SECRET_FILE, "a") as f:
@@ -162,7 +166,9 @@ class TwoFactorVerifyDialog(QDialog):
         
     def verify_code(self):
         totp = pyotp.TOTP(self.secret)
-        if totp.verify(self.code_input.text()):
+        # Fixed the verification issue by using more lenient verification
+        # This allows for time drift between server and client
+        if totp.verify(self.code_input.text(), valid_window=1):
             self.accept()
         else:
             QMessageBox.warning(self, "Verification Failed", "The code is incorrect. Please try again.")
@@ -275,7 +281,7 @@ class LoginWindow(QWidget):
                     parts = line.strip().split()
                     if len(parts) >= 3 and parts[0] == username:
                         return parts[2]
-        return "Unknown"
+        return "User"  # Default to User if not found
     
     def show_register(self):
         self.parent.stacked_widget.setCurrentIndex(1)
@@ -318,9 +324,7 @@ class RegisterWindow(QWidget):
         self.confirm_input.setPlaceholderText("Confirm your password")
         self.confirm_input.setEchoMode(QLineEdit.Password)
         
-        role_label = QLabel("Role:")
-        self.role_combo = QComboBox()
-        self.role_combo.addItems(["User", "Admin"])
+        # Removed role selection - all new registrations will be regular users
         
         form_layout.addWidget(username_label, 0, 0)
         form_layout.addWidget(self.username_input, 0, 1)
@@ -328,12 +332,10 @@ class RegisterWindow(QWidget):
         form_layout.addWidget(self.password_input, 1, 1)
         form_layout.addWidget(confirm_label, 2, 0)
         form_layout.addWidget(self.confirm_input, 2, 1)
-        form_layout.addWidget(role_label, 3, 0)
-        form_layout.addWidget(self.role_combo, 3, 1)
         
         self.enable_2fa_checkbox = QPushButton("Enable Two-Factor Authentication")
         self.enable_2fa_checkbox.setCheckable(True)
-        form_layout.addWidget(self.enable_2fa_checkbox, 4, 1)
+        form_layout.addWidget(self.enable_2fa_checkbox, 3, 1)
         
         layout.addLayout(form_layout)
         
@@ -365,7 +367,7 @@ class RegisterWindow(QWidget):
         username = self.username_input.text()
         password = self.password_input.text()
         confirm = self.confirm_input.text()
-        role = self.role_combo.currentText()
+        role = "User"  # Default role is always User now
         
         if not username or not password or not confirm:
             self.status_label.setText("Please fill all required fields")
@@ -473,8 +475,17 @@ class CommandPanel(QWidget):
     def run_command(self):
         command = self.command_input.text()
         username = self.parent.parent.username
+        user_role = self.parent.parent.user_role
         
         if not command:
+            return
+        
+        # Check if user is allowed to run this command
+        command_base = command.split()[0]  # Extract the base command
+        
+        if user_role.lower() != "admin" and command_base not in USER_ALLOWED_COMMANDS:
+            self.output_text.setText(f"Permission denied: '{command_base}' is restricted to admin users.")
+            self.log_with_timestamp(f"[SYSCALL] User: {username}, Command: {command}, Status: Denied (Permission)")
             return
             
         # Call the backend system call function using subprocess
@@ -487,7 +498,7 @@ class CommandPanel(QWidget):
         self.output_text.setText(result.stdout)
         
         # Log command execution with timestamp
-        self.log_with_timestamp(f"[SYSCALL] User: {username}, Command: {command}")
+        self.log_with_timestamp(f"[SYSCALL] User: {username}, Command: {command}, Status: Executed")
         
     def log_with_timestamp(self, message):
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
@@ -662,9 +673,22 @@ class UserManagement(QWidget):
         refresh_button = QPushButton("Refresh Users")
         refresh_button.clicked.connect(self.load_users)
         
+        # Admin promotion section
+        promote_layout = QHBoxLayout()
+        promote_label = QLabel("Promote to Admin:")
+        self.promote_input = QLineEdit()
+        self.promote_input.setPlaceholderText("Enter username")
+        promote_button = QPushButton("Promote")
+        promote_button.clicked.connect(self.promote_user)
+        
+        promote_layout.addWidget(promote_label)
+        promote_layout.addWidget(self.promote_input)
+        promote_layout.addWidget(promote_button)
+        
         controls_layout.addWidget(refresh_button)
         
         layout.addLayout(controls_layout)
+        layout.addLayout(promote_layout)
         
         self.setLayout(layout)
         
@@ -699,8 +723,50 @@ class UserManagement(QWidget):
                         self.user_table.setItem(row, 0, QTableWidgetItem(username))
                         self.user_table.setItem(row, 1, QTableWidgetItem(role))
                         self.user_table.setItem(row, 2, QTableWidgetItem(has_2fa))
+                        
+    def promote_user(self):
+        username = self.promote_input.text().strip()
+        if not username:
+            QMessageBox.warning(self, "Error", "Please enter a username to promote")
+            return
+            
+        # Check if user exists
+        user_found = False
+        updated_lines = []
+        
+        if os.path.exists("users/user_data.txt"):
+            with open("users/user_data.txt", "r") as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) >= 3 and parts[0] == username:
+                        user_found = True
+                        # Update role to Admin
+                        parts[2] = "Admin"
+                        updated_line = " ".join(parts)
+                        updated_lines.append(updated_line + "\n")
+                    else:
+                        updated_lines.append(line)
+                        
+            if user_found:
+                # Write updated user data
+                with open("users/user_data.txt", "w") as f:
+                    f.writelines(updated_lines)
+                    
+                QMessageBox.information(self, "Success", f"User '{username}' promoted to Admin")
+                self.log_with_timestamp(f"[ADMIN] User '{username}' promoted to Admin by {self.parent.parent.username}")
+                self.load_users()
+            else:
+                QMessageBox.warning(self, "Error", f"User '{username}' not found")
+        else:
+            QMessageBox.warning(self, "Error", "User database not found")
+            
+def log_with_timestamp(self, message):
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+        timestamp = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{timestamp}] {message}\n")
 
-class MainWindow(QWidget):
+class SettingsPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__()
         self.parent = parent
@@ -709,197 +775,310 @@ class MainWindow(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Header with user info
-        header_layout = QHBoxLayout()
+        # Header
+        header = QLabel("User Settings")
+        header.setAlignment(Qt.AlignCenter)
+        header.setFont(QFont("Arial", 14, QFont.Bold))
+        layout.addWidget(header)
         
-        self.welcome_label = QLabel("Welcome, User")
-        self.welcome_label.setFont(QFont("Arial", 14))
+        # Change password section
+        password_group = QWidget()
+        password_layout = QVBoxLayout(password_group)
         
-        self.role_label = QLabel("Role: User")
-        self.role_label.setAlignment(Qt.AlignRight)
+        password_header = QLabel("Change Password")
+        password_header.setFont(QFont("Arial", 12, QFont.Bold))
+        password_layout.addWidget(password_header)
         
-        header_layout.addWidget(self.welcome_label)
-        header_layout.addWidget(self.role_label)
+        form_layout = QGridLayout()
         
-        layout.addLayout(header_layout)
+        current_label = QLabel("Current Password:")
+        self.current_input = QLineEdit()
+        self.current_input.setEchoMode(QLineEdit.Password)
         
-        # Tabs
-        self.tabs = QTabWidget()
+        new_label = QLabel("New Password:")
+        self.new_input = QLineEdit()
+        self.new_input.setEchoMode(QLineEdit.Password)
         
-        self.command_panel = CommandPanel(self)
-        self.log_viewer = LogViewer(self)
-        self.user_management = UserManagement(self)
+        confirm_label = QLabel("Confirm New Password:")
+        self.confirm_input = QLineEdit()
+        self.confirm_input.setEchoMode(QLineEdit.Password)
         
-        self.tabs.addTab(self.command_panel, "Command Panel")
-        self.tabs.addTab(self.log_viewer, "Log Viewer")
-        self.tabs.addTab(self.user_management, "User Management")
+        form_layout.addWidget(current_label, 0, 0)
+        form_layout.addWidget(self.current_input, 0, 1)
+        form_layout.addWidget(new_label, 1, 0)
+        form_layout.addWidget(self.new_input, 1, 1)
+        form_layout.addWidget(confirm_label, 2, 0)
+        form_layout.addWidget(self.confirm_input, 2, 1)
         
-        layout.addWidget(self.tabs)
+        change_button = QPushButton("Change Password")
+        change_button.clicked.connect(self.change_password)
         
-        # Logout button
-        logout_layout = QHBoxLayout()
-        logout_layout.addStretch()
+        password_layout.addLayout(form_layout)
+        password_layout.addWidget(change_button)
         
-        self.logout_button = QPushButton("Logout")
-        self.logout_button.clicked.connect(self.logout)
-        logout_layout.addWidget(self.logout_button)
+        layout.addWidget(password_group)
         
-        layout.addLayout(logout_layout)
+        # Two-factor authentication setup
+        twofa_group = QWidget()
+        twofa_layout = QVBoxLayout(twofa_group)
+        
+        twofa_header = QLabel("Two-Factor Authentication")
+        twofa_header.setFont(QFont("Arial", 12, QFont.Bold))
+        twofa_layout.addWidget(twofa_header)
+        
+        self.twofa_status = QLabel("Status: Checking...")
+        twofa_layout.addWidget(self.twofa_status)
+        
+        self.twofa_button = QPushButton("Enable Two-Factor Authentication")
+        self.twofa_button.clicked.connect(self.toggle_2fa)
+        twofa_layout.addWidget(self.twofa_button)
+        
+        layout.addWidget(twofa_group)
+        
+        # Account info
+        info_group = QWidget()
+        info_layout = QVBoxLayout(info_group)
+        
+        info_header = QLabel("Account Information")
+        info_header.setFont(QFont("Arial", 12, QFont.Bold))
+        info_layout.addWidget(info_header)
+        
+        self.username_label = QLabel(f"Username: {self.parent.parent.username}")
+        self.role_label = QLabel(f"Role: {self.parent.parent.user_role}")
+        self.created_label = QLabel("Account Created: N/A")
+        
+        info_layout.addWidget(self.username_label)
+        info_layout.addWidget(self.role_label)
+        info_layout.addWidget(self.created_label)
+        
+        layout.addWidget(info_group)
         
         self.setLayout(layout)
         
-    def update_user_info(self, username, role):
-        self.welcome_label.setText(f"Welcome, {username}")
-        self.role_label.setText(f"Role: {role}")
+        # Check 2FA status
+        self.check_2fa_status()
         
-        # Hide User Management tab for non-admin users
-        if role.lower() != "admin":
-            self.tabs.setTabVisible(2, False)
+    def check_2fa_status(self):
+        username = self.parent.parent.username
+        has_2fa = False
+        
+        if os.path.exists(TOTP_SECRET_FILE):
+            with open(TOTP_SECRET_FILE, "r") as f:
+                for line in f:
+                    if line.strip().startswith(username + " "):
+                        has_2fa = True
+                        break
+        
+        if has_2fa:
+            self.twofa_status.setText("Status: Enabled")
+            self.twofa_button.setText("Disable Two-Factor Authentication")
         else:
-            self.tabs.setTabVisible(2, True)
+            self.twofa_status.setText("Status: Disabled")
+            self.twofa_button.setText("Enable Two-Factor Authentication")
+    
+    def toggle_2fa(self):
+        username = self.parent.parent.username
+        has_2fa = False
+        
+        if os.path.exists(TOTP_SECRET_FILE):
+            with open(TOTP_SECRET_FILE, "r") as f:
+                for line in f:
+                    if line.strip().startswith(username + " "):
+                        has_2fa = True
+                        break
+        
+        if has_2fa:
+            # Disable 2FA
+            if QMessageBox.question(
+                self, "Confirm Disable 2FA", 
+                "Are you sure you want to disable two-factor authentication? This will reduce your account security.",
+                QMessageBox.Yes | QMessageBox.No
+            ) == QMessageBox.Yes:
+                # Remove the 2FA entry
+                lines = []
+                with open(TOTP_SECRET_FILE, "r") as f:
+                    lines = f.readlines()
+                
+                with open(TOTP_SECRET_FILE, "w") as f:
+                    for line in lines:
+                        if not line.strip().startswith(username + " "):
+                            f.write(line)
+                
+                self.twofa_status.setText("Status: Disabled")
+                self.twofa_button.setText("Enable Two-Factor Authentication")
+                QMessageBox.information(self, "Success", "Two-factor authentication has been disabled")
+                self.log_with_timestamp(f"[SECURITY] User: {username}, Action: Disabled 2FA")
+        else:
+            # Enable 2FA
+            setup_dialog = TwoFactorSetupDialog(username)
+            setup_dialog.exec_()
+            self.check_2fa_status()
+            self.log_with_timestamp(f"[SECURITY] User: {username}, Action: Enabled 2FA")
+    
+    def change_password(self):
+        username = self.parent.parent.username
+        current = self.current_input.text()
+        new_password = self.new_input.text()
+        confirm = self.confirm_input.text()
+        
+        if not current or not new_password or not confirm:
+            QMessageBox.warning(self, "Error", "Please fill all password fields")
+            return
+        
+        if new_password != confirm:
+            QMessageBox.warning(self, "Error", "New passwords do not match")
+            return
+        
+        # Verify current password
+        result = subprocess.run(
+            ["./main", "verify", username, current],
+            capture_output=True,
+            text=True
+        )
+        
+        if "Verification successful" in result.stdout:
+            # Update password
+            result = subprocess.run(
+                ["./main", "update_password", username, new_password],
+                capture_output=True,
+                text=True
+            )
             
-    def logout(self):
-        # Log logout with timestamp
-        username = self.parent.username
-        self.log_with_timestamp(f"[AUTH] User: {username}, Status: Logout")
-        
-        self.parent.username = ""
-        self.parent.user_role = ""
-        self.parent.show_login_window()
-        
+            if "Password updated successfully" in result.stdout:
+                QMessageBox.information(self, "Success", "Password has been updated")
+                self.current_input.clear()
+                self.new_input.clear()
+                self.confirm_input.clear()
+                self.log_with_timestamp(f"[SECURITY] User: {username}, Action: Changed password")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to update password")
+        else:
+            QMessageBox.warning(self, "Error", "Current password is incorrect")
+    
     def log_with_timestamp(self, message):
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
         timestamp = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
         with open(LOG_FILE, "a") as f:
             f.write(f"[{timestamp}] {message}\n")
 
-class SecureAccessSystem(QMainWindow):
-    def __init__(self):
+class MainWindow(QTabWidget):
+    def __init__(self, parent=None):
         super().__init__()
-        self.username = ""
-        self.user_role = ""
+        self.parent = parent
         self.init_ui()
         
     def init_ui(self):
-        self.setWindowTitle("Secure Access System")
-        self.setMinimumSize(800, 600)
+        # Create tabs
+        self.command_panel = CommandPanel(self)
+        self.addTab(self.command_panel, "Command Panel")
         
-        # Set cybersecurity-themed dark style# Set cybersecurity-themed dark style
-        self.set_dark_theme()
+        self.settings_panel = SettingsPanel(self)
+        self.addTab(self.settings_panel, "Settings")
         
-        # Create stacked widget for different screens
+        self.log_viewer = LogViewer(self)
+        self.addTab(self.log_viewer, "System Logs")
+        
+        # User management only visible to admins
+        if self.parent.user_role.lower() == "admin":
+            self.user_management = UserManagement(self)
+            self.addTab(self.user_management, "User Management")
+        
+        # Logout button
+        self.logout_button = QPushButton("Logout")
+        self.logout_button.clicked.connect(self.logout)
+        self.setCornerWidget(self.logout_button, Qt.TopRightCorner)
+        
+        # Set window properties
+        self.setWindowTitle(f"Secure Access System - {self.parent.username} ({self.parent.user_role})")
+        self.resize(800, 600)
+        
+    def logout(self):
+        if QMessageBox.question(
+            self, "Confirm Logout", 
+            "Are you sure you want to logout?",
+            QMessageBox.Yes | QMessageBox.No
+        ) == QMessageBox.Yes:
+            self.log_with_timestamp(f"[AUTH] User: {self.parent.username}, Status: Logout")
+            self.parent.username = None
+            self.parent.user_role = None
+            self.parent.show_login_window()
+            
+    def log_with_timestamp(self, message):
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+        timestamp = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{timestamp}] {message}\n")
+
+class MainApplication(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.username = None
+        self.user_role = None
+        self.init_ui()
+        
+    def init_ui(self):
         self.stacked_widget = QStackedWidget()
         
-        # Create login and register screens
+        # Create login and register windows
         self.login_window = LoginWindow(self)
         self.register_window = RegisterWindow(self)
-        self.main_window = MainWindow(self)
         
-        # Add screens to stacked widget
+        # Add to stacked widget
         self.stacked_widget.addWidget(self.login_window)
         self.stacked_widget.addWidget(self.register_window)
-        self.stacked_widget.addWidget(self.main_window)
-        
-        # Set initial screen
-        self.stacked_widget.setCurrentIndex(0)
         
         self.setCentralWidget(self.stacked_widget)
         
-    def set_dark_theme(self):
-        self.setStyleSheet("""
-            QMainWindow, QWidget {
-                background-color: #1e1e2e;
-                color: #cdd6f4;
-            }
-            QLabel {
-                color: #cdd6f4;
-            }
-            QPushButton {
-                background-color: #313244;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
-                border-radius: 4px;
-                padding: 5px 10px;
-            }
-            QPushButton:hover {
-                background-color: #45475a;
-                border: 1px solid #585b70;
-            }
-            QPushButton:pressed {
-                background-color: #585b70;
-            }
-            QPushButton:checked {
-                background-color: #89b4fa;
-                color: #1e1e2e;
-            }
-            QLineEdit, QTextEdit, QComboBox {
-                background-color: #313244;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
-                border-radius: 4px;
-                padding: 5px;
-            }
-            QTableWidget {
-                background-color: #313244;
-                color: #cdd6f4;
-                gridline-color: #45475a;
-                border: 1px solid #45475a;
-            }
-            QHeaderView::section {
-                background-color: #45475a;
-                color: #cdd6f4;
-                border: 1px solid #585b70;
-                padding: 5px;
-            }
-            QTabWidget::pane {
-                border: 1px solid #45475a;
-                border-radius: 4px;
-            }
-            QTabBar::tab {
-                background-color: #313244;
-                color: #cdd6f4;
-                border: 1px solid #45475a;
-                border-bottom-color: transparent;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                padding: 5px 10px;
-                margin-right: 2px;
-            }
-            QTabBar::tab:selected {
-                background-color: #45475a;
-            }
-            QTabBar::tab:hover {
-                background-color: #585b70;
-            }
-        """)
+        # Set window properties
+        self.setWindowTitle("Secure Access System")
+        self.resize(600, 400)
+        
+        # Create logs directory if it doesn't exist
+        os.makedirs("logs", exist_ok=True)
+        os.makedirs("users", exist_ok=True)
         
     def show_login_window(self):
+        self.login_window = LoginWindow(self)
+        self.stacked_widget.removeWidget(self.stacked_widget.widget(0))
+        self.stacked_widget.insertWidget(0, self.login_window)
         self.stacked_widget.setCurrentIndex(0)
-        self.login_window.username_input.clear()
-        self.login_window.password_input.clear()
-        self.login_window.status_label.clear()
-        
-    def show_register_window(self):
-        self.stacked_widget.setCurrentIndex(1)
+        self.setWindowTitle("Secure Access System")
+        self.resize(600, 400)
         
     def show_main_window(self):
-        self.stacked_widget.setCurrentIndex(2)
-        self.main_window.update_user_info(self.username, self.user_role)
-        
-def main():
-    app = QApplication(sys.argv)
+        self.main_window = MainWindow(self)
+        # Replace any existing widgets with the main window
+        for i in range(self.stacked_widget.count()):
+            self.stacked_widget.removeWidget(self.stacked_widget.widget(0))
+        self.stacked_widget.addWidget(self.main_window)
+        self.stacked_widget.setCurrentIndex(0)
+        self.setWindowTitle(f"Secure Access System - {self.username} ({self.user_role})")
+        self.resize(800, 600)
+
+if __name__ == "__main__":
+    app = QApplication([])
     
-    # Set application icon
-    #app.setWindowIcon(QIcon("icon.png"))
+    # Set application style
+    app.setStyle("Fusion")
     
-    # Create directories if they don't exist
-    os.makedirs("users", exist_ok=True)
-    os.makedirs("logs", exist_ok=True)
+    # Dark theme
+    dark_palette = QPalette()
+    dark_palette.setColor(QPalette.Window, QColor(53, 53, 53))
+    dark_palette.setColor(QPalette.WindowText, Qt.white)
+    dark_palette.setColor(QPalette.Base, QColor(35, 35, 35))
+    dark_palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
+    dark_palette.setColor(QPalette.ToolTipBase, QColor(25, 25, 25))
+    dark_palette.setColor(QPalette.ToolTipText, Qt.white)
+    dark_palette.setColor(QPalette.Text, Qt.white)
+    dark_palette.setColor(QPalette.Button, QColor(53, 53, 53))
+    dark_palette.setColor(QPalette.ButtonText, Qt.white)
+    dark_palette.setColor(QPalette.BrightText, Qt.red)
+    dark_palette.setColor(QPalette.Link, QColor(42, 130, 218))
+    dark_palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+    dark_palette.setColor(QPalette.HighlightedText, Qt.black)
+    app.setPalette(dark_palette)
     
-    window = SecureAccessSystem()
-    window.show()
+    main_app = MainApplication()
+    main_app.show()
     
     sys.exit(app.exec_())
-    
-if __name__ == "__main__":
-    main()
