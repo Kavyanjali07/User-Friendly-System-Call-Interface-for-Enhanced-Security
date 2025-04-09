@@ -174,58 +174,72 @@ Each part works as intended:
   - Introduced role-based permissions for running commands.  
   - Improved logging for system calls to enhance tracking.  
 
-**Installation & Setup Guide**
+## ⚙️ Installation & Setup Guide
 
-Prerequisites
+### ✅ Prerequisites
 
-- C++ compiler (g++ recommended)
-- OpenSSL development libraries
-- Python 3.8+ (for GUI interface)
-- Git (for repository cloning)
+Ensure the following are installed on your system:
 
-**Step 1:** Install System Dependencies
-bash# Update package lists
+- **C++ compiler** (g++ recommended)
+- **OpenSSL development libraries**
+- **Python 3.8+** (for GUI)
+- **Git** (to clone the repository)
+
+---
+
+### 🔧 Step 1: Install System Dependencies
+
+```bash
+# Update package lists
 sudo apt update
 
 # Install C++ dependencies
 sudo apt install g++ libssl-dev make -y
 
-# Install Python dependencies (for GUI)
+# Install Python 3 and virtual environment tools
 sudo apt install python3 python3-pip python3-venv -y
 
-**Step 2:** Clone the Repository
-bash mkdir SecureSysCallProject
+##Clone the repository
+
+# Create a project directory and navigate into it
+mkdir SecureSysCallProject
 cd SecureSysCallProject
+
+###Step2: Clone the GitHub repository
 git clone git@github.com:Kavyanjali07/User-Friendly-System-Call-Interface-for-Enhanced-Security.git
+
+# Move into the cloned project
 cd User-Friendly-System-Call-Interface-for-Enhanced-Security
 
-**Step 3:** Set Up Python Environment (for GUI)
-bash# Create virtual environment
+
+### Step 3: Set Up Python Environment (for GUI)
+
+# Create a virtual environment
 python3 -m venv venv
 
-# Activate virtual environment
+# Activate the virtual environment
 source venv/bin/activate
 
-# Install Python dependencies
-pip install -r requirements.txt
-Step 4: Compile the Project
-bash# Compile C++ components
+### Step 4: Compile the C++ Project
+
+# Build the C++ backend components
 make
 
-🖥️ Usage Instructions
-Command-Line Interface
-bash# Run the CLI application
-./secure_syscall
+###Usage Instructions
 
-# Follow the prompts to log in and execute commands
-Graphical User Interface
-bash# Ensure virtual environment is activated
+### Command-Line Interface (CLI)
+# Run the CLI application
+./secure_auth
+
+
+#Graphical User Interface (GUI)
+# Ensure the virtual environment is activated
 source venv/bin/activate
 
-# Start the GUI application
+# Launch the GUI
 python src/gui/main.py
-
-**Security Best Practices**
+```
+###Security Best Practices
 
 - Regularly update user passwords
 - Enable two-factor authentication for all users
@@ -233,18 +247,10 @@ python src/gui/main.py
 - Limit system commands based on least privilege principle
 - Keep all dependencies updated to patch security vulnerabilities
 
-** Recent Updates**
+###Recent Updates
 
 - Added graphical user interface for improved usability
 - Implemented two-factor authentication for enhanced security
 - Added command sanitization to prevent injection attacks
 - Improved logging with rotation and tamper-evident features
 - Enhanced role-based permissions system
-
-**Contributors**
-
-- Kavyanjali Vashishtha
-- Sargun Dhingra
-- Akshita
-
-
