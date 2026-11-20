@@ -1,256 +1,100 @@
-**USER-FRIENDLY SECURE SYSTEM CALL INTERFACE**
+# User-Friendly System Call Interface for Enhanced Security
 
-**PROJECT OVERVIEW**  
-This project focuses on creating a safe system call interface with enhanced security features. It ensures that only users who are verified can run system commands and it maintains a detailed record of who accessed what. 
+A small C++ and Python project exploring a controlled interface for running a limited set of system commands, with basic user records and audit logging.
 
-**Key Features**
+> **Security status: educational prototype only. Do not use this project to protect a real system or execute commands for untrusted users.** The current implementation has important authentication and command-execution limitations described below.
 
-- Dual Interface - Command-line and graphical interfaces for flexible user interaction
-- Strong Authentication - Username/password verification with optional two-factor authentication
-- Extensive Logging - Comprehensive audit trails for all authentication attempts and system calls
-- Role-Based Access Control - User permissions based on assigned roles
-- Secure System Call Execution - Protected command execution with input validation
-- User-Friendly GUI - Intuitive graphical interface for easier system interaction
+## Project overview
 
-**PROJECT ARCHITECTURE**  
-The whole project is divided into three main pieces:
+The project separates a few core concerns:
 
-1. **Authentication Module** – This takes care of user logins and verifies their identities. 
-2. **Logging Module** – This keeps track of everything that happens, like login attempts and commands run. 
-3. **System Call Handler** – This makes sure that system commands are executed safely only by authorized users.
-4. **GUI Interfac**e - Provides graphical access to all system features
+- Authentication helpers for checking user records
+- A command allowlist for a small set of commands
+- Logging of command attempts and execution events
+- A graphical interface implemented in Python/Tkinter
 
-These components work together to create a cohesive security framework while maintaining ease of use.
+## Current implementation
 
-**FOLDER STRUCTURE**  
-Here’s how the files are organized in the project:
-```
-SecureSysCallProject/
-│-- src/
-│   │-- auth_module.cpp
-│   │-- log_manager.cpp
-│   │-- syscall_handler.cpp
-│   │-- gui/
-│       │-- main.py
-│       │-- auth_screen.py
-│       │-- dashboard.py
-│       │-- system_call_panel.py
-│-- include/
-│   │-- auth_module.h
-│   │-- log_manager.h
-│   │-- syscall_handler.h
-│-- logs/
-│   │-- auth_log.txt
-│   │-- syscall_log.txt
-│-- users/
-│   │-- users.h
-│-- static/
-│   │-- icons/
-│   │-- styles/
-│-- README.md
-│-- Makefile
-│-- requirements.txt
-```
+### Authentication
 
-**OVERVIEW OF MODULES**  
+The C++ authentication module reads user records from `users/user_data.txt` and compares a stored digest against a SHA-256 digest of the password concatenated with the username.
 
-1. **AUTHENTICATION MODULE (auth_module.cpp &amp; auth_module.h)**  
-   **Purpose:**  
-   The Authentication Module checks the identity of users before they can access the system. Its job is to keep credentials safe and log both successful and failed login attempts.
+This is **not suitable password storage**:
+- SHA-256 is a fast general-purpose hash, not a password-hashing function.
+- The username is used as a predictable, non-random salt.
+- There is no configurable work factor.
 
-   **Core Functionalities:**  
-   - Maintains a list of users who are allowed access (found in users.h).  
-   - Uses SHA-256 to securely hash passwords.  
-   - Confirms user credentials against the stored information.  
+For a real application, use a password-hashing scheme such as Argon2id, scrypt, or bcrypt with a unique random salt per password. Do not reuse existing credentials from this prototype.
 
-   **Files:**  
-   - **auth_module.cpp:** Contains the code that handles user login processes.  
-   - **auth_module.h:** Lists the functions for user authentication tasks.  
-   - **users.h:** Holds user credentials in a secure manner.  
+### Command handling
 
-   **Key Functions:**  
-   - `bool isValidUser(const std::string&amp; username, const std::string&amp; password)`: Checks if the provided username and password are correct.  
-   - `std::string hashPassword(const std::string&amp; password)`: Hashes the given password with SHA-256 for security.  
-   - `void logAuthentication(const std::string&amp; username, const std::string&amp; status)`: Logs the outcome of login attempts.  
-   - `std::string getUserRole(const std::string&amp; username)`: Identifies the role of the user, indicating whether they are an Admin or just a regular User.  
+The current command handler contains a small allowlist:
 
-2. **LOGGING MODULE (log_manager.cpp &amp; log_manager.h)**  
-   **Purpose:**  
-   The Logging Module is responsible for tracking every authentication attempt and any system calls that are made. This helps create a clear record for security reviews later.
+- `ls`
+- `whoami`
+- `uptime`
+- `pwd`
 
-   **Core Features:**  
-   - Records when users try to log in, including the times of attempts.  
-   - Logs every system call that is executed for monitoring purposes.  
-   - Allows retrieval of logs whenever necessary.  
-   - Tracks errors to identify what went wrong.  
+It rejects commands that do not exactly match an allowed string and records the attempt. Allowed commands are executed through `std::system`.
 
-   **Files:**  
-   - **log_manager.cpp:** Implements the logging functionality.  
-   - **log_manager.h:** Defines the logging-related functions.  
-   - **auth_log.txt:** Holds records of all authentication attempts.  
-   - **syscall_log.txt:** Contains records of all system calls made.  
+**Important limitation:** the command handler does not itself verify the caller's password or enforce the user's role before execution. A role helper exists, but the current command execution path does not use it as an authorization check. A command allowlist combined with `std::system` is not a robust security boundary.
 
-   **Key Functions:**  
-   - `void logEvent(const std::string&amp; username, const std::string&amp; event)`: Logs what system calls are executed.  
-   - `void logError(const std::string&amp; errorMessage)`: Records any errors that the system encounters.  
-   - `void displayLogs()`: Shows all logs of login attempts and executed commands.  
+A safer redesign would use direct process execution with fixed executable paths and argument arrays, enforce authorization inside the privileged operation, and avoid shell interpretation entirely.
 
-3. **SECURE SYSTEM CALL HANDLER (syscall_handler.cpp &amp; syscall_handler.h)**  
-   **Purpose:**  
-   This module ensures that only authenticated users can safely execute system commands.
+### Logging
 
-   **Core Features:**  
-   - Verifies if the user is authenticated before allowing them to run system calls.  
-   - Executes commands in a safe way to prevent misuse.  
-   - Logs every command that's executed for security monitoring.  
-   - Ensures that permission to access features is based on the user's role.  
-   - Blocks unauthorized commands from going through.  
+The current logging module appends authentication and command events to `logs/system_logs.txt`. This is a basic local audit trail, not tamper-resistant logging.
 
-   **Files:**  
-   - **syscall_handler.cpp:** Responsible for securely executing system calls.  
-   - **syscall_handler.h:** Lists functions related to managing system calls.  
-   - **syscall_log.txt:** Stores logs of all commands that were executed.  
+## Repository layout
 
-   **Key Functions:**  
-   - `void secureSystemCall(const std::string&amp; username, const std::string&amp; command)`: Handles the secure execution of commands.  
-   - `bool isAuthorizedUser(const std::string&amp; username)`: Checks if the user is permitted to carry out the commands.  
-   - `void logSystemCall(const std::string&amp; username, const std::string&amp; command)`: Keeps a security log of executed commands.  
+The project is organised around:
 
-4. **GUI Interface**
-**Purpose**
- Provides user-friendly graphical access to all system features
+- `src/auth_module.cpp` — user-record lookup and password comparison
+- `src/syscall_handler.cpp` — command allowlist and execution
+- `src/log_manager.cpp` — basic event logging
+- `include/` — C++ declarations
+- `src/gui/` — Python/Tkinter interface
+- `Makefile` — C++ build commands
+- `requirements.txt` — Python dependencies, if present in the checkout
 
-**Key Features:**
+## Build
 
-- Intuitive login screen with 2FA support
-- Dashboard for system monitoring
-- Command execution panel with history
-- Real-time log viewer
-- User management interface (admin only)
-
-**Key Components:**
-
-- auth_screen.py - Handles login and 2FA verification
-- dashboard.py - Main user interface after authentication
-- system_call_panel.py - Interface for executing system calls
-- log_viewer.py - Visual interface for reviewing system logs
-
-**Workflow**
-
-- Authentication: Users provide credentials via CLI or GUI
-- Verification: System validates credentials and optional 2FA
-- Authorization: System checks user permissions for requested actions
-- Execution: Commands are sanitized and executed securely
-- Logging: All activities are recorded for audit purposes
-
-** Functionality Summary**
-Each part works as intended:
-
-- Login & Registration via CLI and GUI
-
-- Role-Based Access Control
-
-- 2FA in GUI
-
-- Command Execution with Restrictions
-
-- Logs Viewable via GUI + Export to File
-
-- Dashboard showing last commands & activity 
-
-
-**REVISIONS**  
-- **Authentication Module:**  
-  - Set up basic authentication.  
-  - Added a layer of security by hashing passwords.  
-  - Enhanced security further with SHA-256 hashing.  
-
-- **Log Manager Module:**  
-  - Introduced timestamps for all logged events.  
-  - Implemented a feature to view logs for system calls.  
-
-- **Secure System Call Handler:**  
-  - Added checks for receiving input before executing calls.  
-  - Introduced role-based permissions for running commands.  
-  - Improved logging for system calls to enhance tracking.  
-
-## ⚙️ Installation & Setup Guide
-
-### ✅ Prerequisites
-
-Ensure the following are installed on your system:
-
-- **C++ compiler** (g++ recommended)
-- **OpenSSL development libraries**
-- **Python 3.8+** (for GUI)
-- **Git** (to clone the repository)
-
----
-
-### 🔧 Step 1: Install System Dependencies
+On a Debian-based Linux system, install a C++ compiler, Make, and OpenSSL development headers:
 
 ```bash
-# Update package lists
 sudo apt update
-
-# Install C++ dependencies
-sudo apt install g++ libssl-dev make -y
-
-# Install Python 3 and virtual environment tools
-sudo apt install python3 python3-pip python3-venv -y
-
-##Clone the repository
-
-# Create a project directory and navigate into it
-mkdir SecureSysCallProject
-cd SecureSysCallProject
-
-###Step2: Clone the GitHub repository
-git clone git@github.com:Kavyanjali07/User-Friendly-System-Call-Interface-for-Enhanced-Security.git
-
-# Move into the cloned project
-cd User-Friendly-System-Call-Interface-for-Enhanced-Security
-
-
-### Step 3: Set Up Python Environment (for GUI)
-
-# Create a virtual environment
-python3 -m venv venv
-
-# Activate the virtual environment
-source venv/bin/activate
-
-### Step 4: Compile the C++ Project
-
-# Build the C++ backend components
-make
-
-###Usage Instructions
-
-### Command-Line Interface (CLI)
-# Run the CLI application
-./secure_auth
-
-
-#Graphical User Interface (GUI)
-# Ensure the virtual environment is activated
-source venv/bin/activate
-
-# Launch the GUI
-python src/gui/main.py
+sudo apt install build-essential libssl-dev
 ```
-###Security Best Practices
 
-- Regularly update user passwords
-- Enable two-factor authentication for all users
-- Review logs periodically for unauthorized access attempts
-- Limit system commands based on least privilege principle
-- Keep all dependencies updated to patch security vulnerabilities
+Build the C++ components:
 
-###Recent Updates
+```bash
+make
+```
 
-- Added graphical user interface for improved usability
-- Implemented two-factor authentication for enhanced security
-- Added command sanitization to prevent injection attacks
-- Improved logging with rotation and tamper-evident features
-- Enhanced role-based permissions system
+Clean generated build files:
+
+```bash
+make clean
+```
+
+The GUI is implemented separately in Python. Check the files under `src/gui/` for its entry point and Python dependencies before running it.
+
+## Known limitations and next steps
+
+Before this project could be considered a security control, it needs substantial changes:
+
+1. Replace the fast SHA-256 password digest with Argon2id, scrypt, or bcrypt and unique random salts.
+2. Enforce authentication and authorization inside the command execution boundary.
+3. Replace `std::system` with safe process execution that does not invoke a shell.
+4. Separate privileged operations from the GUI and apply least privilege.
+5. Validate user records, roles, file permissions, and log access.
+6. Add automated tests for authentication, authorization, invalid input, and command execution.
+7. Document the actual GUI workflow and supported runtime environment.
+
+## Author
+
+**Kavyanjali**
+
+- [GitHub](https://github.com/Kavyanjali07)
+- [LinkedIn](https://www.linkedin.com/in/kavyanjali07)
